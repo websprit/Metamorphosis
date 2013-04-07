@@ -59,6 +59,7 @@ public class MetaConfig extends Config implements Serializable, MetaConfigMBean 
     private int brokerId = 0;
     private String dataPath = System.getProperty("user.home") + File.separator + "meta";
     private int serverPort = 8123;
+    private int dashboardHttpPort = 8120;
     private String hostName;
     private int numPartitions = 1;
     private int unflushThreshold = 1000;
@@ -130,6 +131,28 @@ public class MetaConfig extends Config implements Serializable, MetaConfigMBean 
     private boolean stat;
 
     private boolean updateConsumerOffsets = Boolean.parseBoolean(System.getProperty("meta.get.tellMaxOffset", "false"));
+
+    private boolean loadMessageStoresInParallel = false;
+
+
+    public int getDashboardHttpPort() {
+        return this.dashboardHttpPort;
+    }
+
+
+    public void setDashboardHttpPort(int dashboardHttpPort) {
+        this.dashboardHttpPort = dashboardHttpPort;
+    }
+
+
+    public boolean isLoadMessageStoresInParallel() {
+        return this.loadMessageStoresInParallel;
+    }
+
+
+    public void setLoadMessageStoresInParallel(boolean loadMessageStoresInParallel) {
+        this.loadMessageStoresInParallel = loadMessageStoresInParallel;
+    }
 
 
     public int getQuartzThreadCount() {
@@ -574,6 +597,7 @@ public class MetaConfig extends Config implements Serializable, MetaConfigMBean 
 
         this.brokerId = this.getInt(sysConf, "brokerId");
         this.serverPort = this.getInt(sysConf, "serverPort", 8123);
+        this.dashboardHttpPort = this.getInt(sysConf, "dashboardHttpPort", 8120);
         if (!StringUtils.isBlank(sysConf.get("dataPath"))) {
             this.setDataPath(sysConf.get("dataPath"));
         }
@@ -632,6 +656,9 @@ public class MetaConfig extends Config implements Serializable, MetaConfigMBean 
         }
         if (!StringUtils.isBlank(sysConf.get("updateConsumerOffsets"))) {
             this.updateConsumerOffsets = this.getBoolean(sysConf, "updateConsumerOffsets");
+        }
+        if (!StringUtils.isBlank(sysConf.get("loadMessageStoresInParallel"))) {
+            this.loadMessageStoresInParallel = this.getBoolean(sysConf, "loadMessageStoresInParallel");
         }
     }
 
