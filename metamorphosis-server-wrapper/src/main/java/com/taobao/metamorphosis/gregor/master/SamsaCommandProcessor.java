@@ -163,7 +163,7 @@ public class SamsaCommandProcessor extends BrokerCommandProcessor {
         @Override
         public void appendComplete(final Location location) {
             this.appendOffset = location.getOffset();
-            if (this.appendOffset != -1) {
+            if (location.isValid()) {
                 synchronized (this) {
                     this.masterSuccess = true;
                 }
@@ -192,14 +192,14 @@ public class SamsaCommandProcessor extends BrokerCommandProcessor {
                 else if (this.masterSuccess) {
                     SamsaCommandProcessor.this.statsManager.statsPutFailed(this.request.getTopic(),
                         this.partitionString, 1);
-                    this.cb.putComplete(new BooleanCommand(HttpStatus.InternalServerError, "Put message to slave failed",
-                        this.request.getOpaque()));
+                    this.cb.putComplete(new BooleanCommand(HttpStatus.InternalServerError,
+                        "Put message to slave failed", this.request.getOpaque()));
                 }
                 else if (this.slaveSuccess) {
                     SamsaCommandProcessor.this.statsManager.statsPutFailed(this.request.getTopic(),
                         this.partitionString, 1);
-                    this.cb.putComplete(new BooleanCommand(HttpStatus.InternalServerError, "Put message to master failed",
-                            this.request.getOpaque()));
+                    this.cb.putComplete(new BooleanCommand(HttpStatus.InternalServerError,
+                        "Put message to master failed", this.request.getOpaque()));
                 }
             }
         }
@@ -305,8 +305,8 @@ public class SamsaCommandProcessor extends BrokerCommandProcessor {
                 log.warn("Can not put message to partition " + request.getPartition() + " for topic="
                         + request.getTopic() + ",it was closed");
                 if (cb != null) {
-                    cb.putComplete(new BooleanCommand(HttpStatus.Forbidden, "Partition["
-                            + partitionString + "] has been closed", request.getOpaque()));
+                    cb.putComplete(new BooleanCommand(HttpStatus.Forbidden, "Partition[" + partitionString
+                        + "] has been closed", request.getOpaque()));
                 }
                 return;
             }
@@ -316,8 +316,8 @@ public class SamsaCommandProcessor extends BrokerCommandProcessor {
             // 如果slave没有链接，马上返回失败，防止master重复消息过多
             if (!this.remotingClient.isConnected(this.slaveUrl)) {
                 this.statsManager.statsPutFailed(request.getTopic(), partitionString, 1);
-                cb.putComplete(new BooleanCommand(HttpStatus.InternalServerError, "Slave is disconnected ",
-                        request.getOpaque()));
+                cb.putComplete(new BooleanCommand(HttpStatus.InternalServerError, "Slave is disconnected ", request
+                    .getOpaque()));
                 return;
             }
 

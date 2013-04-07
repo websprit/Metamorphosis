@@ -28,6 +28,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.FutureTask;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.Lock;
@@ -54,6 +55,7 @@ import com.taobao.metamorphosis.network.RemotingUtils;
 import com.taobao.metamorphosis.utils.MetaZookeeper;
 import com.taobao.metamorphosis.utils.MetaZookeeper.ZKGroupDirs;
 import com.taobao.metamorphosis.utils.MetaZookeeper.ZKGroupTopicDirs;
+import com.taobao.metamorphosis.utils.ThreadUtils;
 import com.taobao.metamorphosis.utils.ZkUtils;
 import com.taobao.metamorphosis.utils.ZkUtils.ZKConfig;
 
@@ -98,15 +100,13 @@ public class ConsumerZooKeeper implements ZkClientChangedListener {
         if (task != null) {
             try {
                 return task.get();
-            }
-            catch (final Exception e) {
-                log.error("ªÒ»°ZKLoadRebalanceListener ß∞‹", e);
-                return null;
+            } catch (final ExecutionException e) {
+                throw ThreadUtils.launderThrowable(e.getCause());
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
             }
         }
-        else {
-            return null;
-        }
+        return null;
     }
 
 
@@ -364,7 +364,7 @@ public class ConsumerZooKeeper implements ZkClientChangedListener {
 
         protected final String consumerIdString;
 
-        static final int MAX_N_RETRIES = 5;
+        static final int MAX_N_RETRIES = 7;
 
         private final LoadBalanceStrategy loadBalanceStrategy;
 
@@ -435,7 +435,7 @@ public class ConsumerZooKeeper implements ZkClientChangedListener {
         public Map<String/* topic */, Set<Partition>> getTopicPartitions() {
             Map<String, Set<Partition>> rt = new HashMap<String, Set<Partition>>();
             for (Map.Entry<String, ConcurrentHashMap<Partition, TopicPartitionRegInfo>> entry : this.topicRegistry
-                .entrySet()) {
+                    .entrySet()) {
                 rt.put(entry.getKey(), entry.getValue().keySet());
             }
             return rt;
@@ -527,7 +527,7 @@ public class ConsumerZooKeeper implements ZkClientChangedListener {
             this.fetchManager.resetFetchState();
             final Set<Broker> changedBrokers = new HashSet<Broker>();
             for (final Map.Entry<String/* topic */, ConcurrentHashMap<Partition, TopicPartitionRegInfo>> entry : this.topicRegistry
-                .entrySet()) {
+                    .entrySet()) {
                 final String topic = entry.getKey();
                 for (final Map.Entry<Partition, TopicPartitionRegInfo> partEntry : entry.getValue().entrySet()) {
                     final Partition partition = partEntry.getKey();
@@ -548,9 +548,9 @@ public class ConsumerZooKeeper implements ZkClientChangedListener {
             for (final Broker broker : changedBrokers) {
                 if (!this.oldBrokerSet.contains(broker)) {
                     try {
-                        ConsumerZooKeeper.this.remotingClient.connect(broker.getZKString());
+                        ConsumerZooKeeper.this.remotingClient.connectWithRef(broker.getZKString(), this);
                         ConsumerZooKeeper.this.remotingClient.awaitReadyInterrupt(broker.getZKString());
-                        log.info("Connect to " + broker.getZKString());
+                        log.warn("Connect to " + broker.getZKString());
                     }
                     catch (final NotifyRemotingException e) {
                         log.error("Connect to " + broker.getZKString() + " failed", e);
@@ -564,11 +564,11 @@ public class ConsumerZooKeeper implements ZkClientChangedListener {
             for (final Broker broker : this.oldBrokerSet) {
                 if (!changedBrokers.contains(broker)) {
                     try {
-                        ConsumerZooKeeper.this.remotingClient.close(broker.getZKString(), false);
-                        log.info("Closing " + broker.getZKString());
+                        ConsumerZooKeeper.this.remotingClient.closeWithRef(broker.getZKString(), this, false);
+                        log.warn("Closed " + broker.getZKString());
                     }
                     catch (final NotifyRemotingException e) {
-                        log.error("Connect to " + broker.getZKString() + " failed", e);
+                        log.error("Close " + broker.getZKString() + " failed", e);
                     }
                 }
             }
@@ -613,7 +613,7 @@ public class ConsumerZooKeeper implements ZkClientChangedListener {
                 }
                 else {
                     log.info("Consumer " + this.consumerIdString + " with " + consumersPerTopicMap
-                            + " doesn't need to be rebalanced.");
+                        + " doesn't need to be rebalanced.");
                 }
                 return true;
             }
@@ -752,7 +752,7 @@ public class ConsumerZooKeeper implements ZkClientChangedListener {
          */
         private void releaseAllPartitionOwnership() {
             for (final Map.Entry<String, ConcurrentHashMap<Partition, TopicPartitionRegInfo>> entry : this.topicRegistry
-                .entrySet()) {
+                    .entrySet()) {
                 final String topic = entry.getKey();
                 final ZKGroupTopicDirs topicDirs =
                         ConsumerZooKeeper.this.metaZookeeper.new ZKGroupTopicDirs(topic, this.consumerConfig.getGroup());
@@ -821,8 +821,8 @@ public class ConsumerZooKeeper implements ZkClientChangedListener {
          * @return
          */
         private Map<String, String> getRelevantTopicMap(final Map<String, String> myConsumerPerTopicMap,
-                final Map<String, List<String>> newPartMap, final Map<String, List<String>> oldPartMap,
-                final Map<String, List<String>> newConsumerMap, final Map<String, List<String>> oldConsumerMap) {
+            final Map<String, List<String>> newPartMap, final Map<String, List<String>> oldPartMap,
+            final Map<String, List<String>> newConsumerMap, final Map<String, List<String>> oldConsumerMap) {
             final Map<String, String> relevantTopicThreadIdsMap = new HashMap<String, String>();
             for (final Map.Entry<String, String> entry : myConsumerPerTopicMap.entrySet()) {
                 final String topic = entry.getKey();
